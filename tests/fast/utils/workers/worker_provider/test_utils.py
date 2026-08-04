@@ -60,7 +60,7 @@ class TestApplyCellObservation:
         recorder = _Recorder()
 
         await apply_cell_observation(
-            _CELL_ID, None, actual_workers_hash=None, add=recorder.add, remove=recorder.remove
+            cell_id=_CELL_ID, observed=None, actual_workers_hash=None, add=recorder.add, remove=recorder.remove
         )
 
         assert recorder.calls == []

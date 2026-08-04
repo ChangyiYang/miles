@@ -332,7 +332,7 @@ class TestWorkerInfosOnRealRay:
         for worker_in_cell_index, info in enumerate(infos):
             recorded = records[f"1-{worker_in_cell_index}"]["context"]["self_addrs"]["primary"]
             assert {"host": info.self_addrs["primary"].host, "port": info.self_addrs["primary"].port} == recorded
-            node_ip = ray.get(info.actor_handle._get_node_ip.remote())
+            node_ip = ray.get(info.handle._actor_handle._get_node_ip.remote())
             assert info.self_addrs["primary"].host.strip("[]") == node_ip
 
 
@@ -344,14 +344,14 @@ class TestWorkerDeathOnRealRay:
         probe.wait_for_records(2)
         infos = ray.get(RayWorkerManager.get_handle().get_worker_infos.remote("engine-0"))
 
-        ray.get(infos[0].actor_handle.kill_subprocess.remote())
+        ray.get(infos[0].handle._actor_handle.kill_subprocess.remote())
 
         deadline = time.monotonic() + 60
         while True:
             try:
-                ray.get(infos[0].actor_handle._get_node_ip.remote(), timeout=5)
+                ray.get(infos[0].handle._actor_handle._get_node_ip.remote(), timeout=5)
             except (ray.exceptions.RayActorError, ray.exceptions.GetTimeoutError):
                 break
             assert time.monotonic() < deadline, "the actor of a dead command is still alive"
             time.sleep(0.5)
-        assert ray.get(infos[1].actor_handle._get_node_ip.remote(), timeout=30)
+        assert ray.get(infos[1].handle._actor_handle._get_node_ip.remote(), timeout=30)
