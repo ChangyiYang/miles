@@ -36,6 +36,7 @@ from miles.utils.types import Sample
 NUM_LAYERS = 3
 TOPK = 2
 
+
 def _make_config(**overrides):
     return make_session_server_config(
         timeout=30,
