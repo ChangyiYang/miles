@@ -43,7 +43,9 @@ def _encode_delta(
     if snap is None:
         return None, cur
     flat_cur = cur.reshape(-1)
-    flat_snap = snap.reshape(-1)
+    # snapshots live on the host to keep GPU memory free, so bring the baseline
+    # to the tensor's device for the comparison
+    flat_snap = snap.reshape(-1).to(flat_cur.device, non_blocking=True)
     changed = (flat_cur != flat_snap).nonzero(as_tuple=True)[0]
     if changed.numel() > flat_cur.numel() * DENSE_FALLBACK_RATIO:
         return None, cur
