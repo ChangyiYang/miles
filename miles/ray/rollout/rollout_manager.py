@@ -175,7 +175,7 @@ class RolloutManager:
         if self.args.delay_split_train_data_by_dp:
             data_ref = object_store.get_instance().put(value=data, value_spec=ROLLOUT_DATA_VALUE_SPEC)
         else:
-            data_ref = split_train_data_by_dp(self.args, data, self.train_parallel_config["dp_size"])
+            data_ref = split_train_data_by_dp(self.args, data, self.train_parallel_config)
         # control_metadata rides next to the data_ref so the driver can hand
         # batch-level decisions (bind plan, train_txn_id) to the trainer —
         # never smuggled inside samples or the object-store shard.
