@@ -16,7 +16,7 @@ from miles.backends.sglang_utils.sglang_engine import _compute_server_args
 def _server_args(
     *,
     worker_type: str = "regular",
-    rank: int = 0,
+    node_rank: int = 0,
     dist_init_addr: str = "10.0.0.1:20000",
     args: Namespace | None = None,
     sglang_overrides: dict | None = None,
@@ -25,7 +25,8 @@ def _server_args(
 ) -> ServerArgs:
     server_args_dict = _compute_server_args(
         args or _args(),
-        rank=rank,
+        node_rank=node_rank,
+        gated_launch_port=20034,
         dist_init_addr=dist_init_addr,
         nccl_port=20031,
         host="10.0.0.1",
@@ -71,7 +72,7 @@ class TestServerArgsToArgv:
     def test_a_multi_node_rank_roundtrips(self):
         """nnodes, node_rank and tp_size of a multi-node engine survive the boundary."""
         server_args = _server_args(
-            rank=1,
+            node_rank=1,
             num_gpus_per_engine=16,
             args=_args(rollout_num_gpus_per_engine=16),
         )
@@ -99,6 +100,14 @@ class TestServerArgsToArgv:
     def test_an_ipv6_dist_init_addr_roundtrips(self):
         """The bracketed v6 rendezvous address survives the argv boundary."""
         server_args = _server_args(dist_init_addr="[fd00::1]:20000")
+        assert _roundtrip(server_args) == server_args
+
+    def test_a_colocate_prefill_cuda_graph_backend_roundtrips(self):
+        """Colocate forces the prefill cuda graph backend off, which sglang folds into a
+        derived config object that has no faithful command-line spelling."""
+        server_args = _server_args(sglang_overrides={"cuda_graph_backend_prefill": "disabled"})
+        argv = server_args_to_argv(server_args)
+        assert "--cuda-graph-config" not in argv
         assert _roundtrip(server_args) == server_args
 
     def test_lora_adapter_paths_roundtrip(self):

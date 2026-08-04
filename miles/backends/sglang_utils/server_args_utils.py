@@ -4,6 +4,8 @@ from sglang.srt.server_args import ServerArgs
 
 from miles.utils.workers.argv_utils import render_cli_argv
 
+_DERIVED_SERVER_ARGS_FIELDS = frozenset({"cuda_graph_config"})
+
 
 def server_args_to_argv(server_args: ServerArgs) -> list[str]:
     return render_cli_argv(
@@ -18,6 +20,7 @@ def server_args_to_argv(server_args: ServerArgs) -> list[str]:
             "--port",
             str(server_args.port),
         ],
+        derived_fields=_DERIVED_SERVER_ARGS_FIELDS,
     )
 
 

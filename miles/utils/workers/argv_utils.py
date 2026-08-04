@@ -32,21 +32,38 @@ def render_cli_argv(
     make_parser: Callable[[], argparse.ArgumentParser],
     from_parsed: Callable[[argparse.Namespace], _ArgsT],
     required_argv: list[str] | None = None,
+    derived_fields: frozenset[str] = frozenset(),
 ) -> list[str]:
+    """Render *args_obj* back into a command line that parses into an equal object.
+
+    Fields named in *derived_fields* are computed by the parser from other flags and
+    have no faithful command-line spelling of their own, so they are not rendered.
+    The roundtrip below is what proves that omitting them loses nothing.
+    """
+
     def parse(argv: list[str]) -> _ArgsT:
         return from_parsed(make_parser().parse_args(argv))
 
     base_argv = list(required_argv or [])
-    argv = base_argv + _render_cli_argv(args_obj, cli_defaults=parse(base_argv))
+    argv = base_argv + _render_cli_argv(args_obj, cli_defaults=parse(base_argv), derived_fields=derived_fields)
 
     parsed = parse(argv)
+    if parsed != args_obj:
+        # A default the parser derives from other flags (e.g. the PD load balance
+        # method) only reveals itself once those flags are on the command line, so
+        # rendering once against the bare defaults can leave it unspelled.
+        argv = argv + _render_cli_argv(args_obj, cli_defaults=parsed, derived_fields=derived_fields)
+        parsed = parse(argv)
+
     assert parsed == args_obj, f"cli argv roundtrip mismatch: {parsed!r} != {args_obj!r}"
     return argv
 
 
-def _render_cli_argv(args_obj: _ArgsT, *, cli_defaults: _ArgsT) -> list[str]:
+def _render_cli_argv(args_obj: _ArgsT, *, cli_defaults: _ArgsT, derived_fields: frozenset[str]) -> list[str]:
     argv: list[str] = []
     for field in dataclasses.fields(args_obj):
+        if field.name in derived_fields:
+            continue
         value = getattr(args_obj, field.name)
         if value == getattr(cli_defaults, field.name):
             continue

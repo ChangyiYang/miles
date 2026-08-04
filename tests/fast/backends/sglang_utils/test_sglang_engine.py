@@ -4,7 +4,7 @@ import shlex
 import sys
 
 import pytest
-from tests.fast.backends.sglang_utils.conftest import make_engine_args
+from tests.fast.backends.sglang_utils.conftest import make_engine_args, make_fake_checkpoint
 
 pytest.importorskip("sglang")
 
@@ -49,7 +49,7 @@ class TestComputeEngineLaunchCmd:
         parsed = parse_server_args_argv(tokens[3:])
         assert parsed.host == "10.0.0.1" and parsed.port == 30000
         assert parsed.dist_init_addr == "10.0.0.1:20000"
-        assert parsed.model_path == "/fake/model"
+        assert parsed.model_path == make_fake_checkpoint()
 
     def test_a_bracketed_v6_host_is_stripped_for_the_server_but_kept_in_dist_addr(self):
         """sglang binds a bare v6 host while the rendezvous addr stays bracketed."""
