@@ -234,6 +234,12 @@ def split_train_data_by_dp(args, data: dict[str, Any], train_parallel_config: di
     if can_schedule_on_rollout_side(args, data, train_parallel_config):
         shards = split_train_data_by_dp_scheduled_raw(args, data, train_parallel_config=train_parallel_config)
     else:
+        # Multi-LoRA has no legacy fallback: whole-batch atomicity (never trim)
+        # and slot-contiguous micro-batches only hold on the scheduled path.
+        assert not is_multi_lora_enabled(args), (
+            "multi-LoRA requires the rollout-side DP schedule; the training backend "
+            f"did not advertise its parallel config (got {train_parallel_config})"
+        )
         shards = split_train_data_by_dp_raw(args, data, dp_size=train_parallel_config["dp_size"])
     store = object_store.get_instance()
     return [store.put(value=shard, value_spec=ROLLOUT_DATA_VALUE_SPEC) for shard in shards]
@@ -243,12 +249,14 @@ def can_schedule_on_rollout_side(args, data: dict[str, Any], train_parallel_conf
     """Whether the rollout side can precompute the full DP/mbs schedule."""
     if not has_full_schedule_config(train_parallel_config):
         return False
-    if is_multi_lora_enabled(args):
-        return False
     if "multimodal_train_inputs" in data:
         return False
     if "rollout_ids" not in data:
         return False
+    if is_multi_lora_enabled(args):
+        # The whole selection trains as one step; the per-step rollout-count
+        # threshold below is a step-formation concern that does not apply.
+        return True
     global_batch_size = data.get("dynamic_global_batch_size", args.global_batch_size)
     return len(set(data["rollout_ids"])) >= global_batch_size
 
@@ -267,6 +275,7 @@ def split_train_data_by_dp_scheduled_raw(
         total_lengths,
         global_batch_size=global_batch_size,
         rollout_indices=data["rollout_ids"],
+        adapter_slots=data.get("adapter_slots"),
     )
     logger.info(
         f"Rollout-side DP schedule: num_samples={len(total_lengths)}, "
@@ -290,12 +299,6 @@ def split_train_data_by_dp_raw(args, data: dict[str, Any], *, dp_size: int) -> l
         partitions = get_seqlen_balanced_partitions(total_lengths, dp_size, equal_size=True)
     else:
         partitions = [range(i, len(total_lengths), dp_size) for i in range(dp_size)]
-
-    # Multi-LoRA: sort partitions by adapter slot so each microbatch is
-    # contiguous-by-slot (required by the per-adapter token-count math).
-    adapter_slots = data.get("adapter_slots")
-    if adapter_slots is not None:
-        partitions = [sorted(p, key=lambda i: adapter_slots[i]) for p in partitions]
 
     return _package_shards(args, data, partitions)
 

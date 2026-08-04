@@ -23,10 +23,13 @@ def postprocess_rollout_data(args, data, train_parallel_config):
         data = list(itertools.chain.from_iterable(data))
 
     # Compact rollouts must not be trimmed by sample count; the schedule drops
-    # whole trailing rollouts instead.
+    # whole trailing rollouts instead. Multi-LoRA batches never trim either:
+    # the selection is whole per-adapter batches whose actual counts are
+    # already booked in the BatchPlan, and the rollout-side schedule trains
+    # everything as one step.
     is_compact = any(s.rollout_id is not None for s in data)
 
-    if not args.disable_rollout_trim_samples and not is_compact:
+    if not args.disable_rollout_trim_samples and not is_compact and not is_multi_lora_enabled(args):
         global_batch_size = args.global_batch_size
         if args.use_dynamic_global_batch_size:
             logger.info(f"Collected {len(data)} samples from rollout to train with dynamic global batch size")
@@ -87,18 +90,6 @@ def _compute_dynamic_global_batch_size(args, train_parallel_config, num_samples:
     """
     dp_size = train_parallel_config["dp_size"]
     original_gbs = args.global_batch_size
-
-    if is_multi_lora_enabled(args):
-        # Masked DP padding for arbitrary counts is a tracked follow-up;
-        # until it lands, the selected whole batches must sum
-        # to a dp-divisible count (standard children with configured batch
-        # sizes satisfy this by construction).
-        if num_samples % dp_size != 0:
-            raise ValueError(
-                f"Multi-LoRA batch of {num_samples} samples is not divisible by dp_size={dp_size}; "
-                "arbitrary variable-size child batches need the masked-padding follow-up"
-            )
-        return num_samples
 
     # Round down to a multiple of dp_size to ensure only one training step
     dynamic_gbs = (num_samples // dp_size) * dp_size

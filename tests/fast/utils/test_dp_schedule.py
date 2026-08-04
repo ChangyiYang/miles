@@ -438,3 +438,46 @@ def test_has_full_schedule_config():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
+
+
+# ---------------------------- multi-LoRA -------------------------------------
+
+
+def test_multi_lora_trains_whole_batch_as_one_step():
+    # The wrapper's selection is exactly one optimizer step per adapter: all
+    # samples land in ONE step regardless of global_batch_size, and a total
+    # that divides into neither gbs nor dp_size is fully covered (no trim).
+    args = make_args(use_dynamic_batch_size=True, max_tokens_per_gpu=100)
+    partitions, _, num_microbatches, num_rollouts = build_dp_schedule(
+        args,
+        make_tp(dp_size=4),
+        [10] * 10,
+        global_batch_size=4,
+        rollout_indices=list(range(10)),
+        adapter_slots=[0] * 8 + [1] * 2,
+    )
+    assert num_rollouts == [10]
+    assert len(num_microbatches) == 1  # one training step
+    assert sorted(i for p in partitions for i in p) == list(range(10))
+
+
+def test_multi_lora_micro_batches_are_slot_sorted():
+    # FFD packs by length only and can interleave adapters inside a bin; the
+    # schedule must restore slot order within every micro-batch (the per-slot
+    # token routing is a counts vector over contiguous rows).
+    args = make_args(use_dynamic_batch_size=True, max_tokens_per_gpu=40)
+    adapter_slots = [1, 0, 1, 0, 0, 1, 1, 0]
+    partitions, micro_batch_indices, _, _ = build_dp_schedule(
+        args,
+        make_tp(dp_size=2),
+        [30, 5, 5, 30, 5, 30, 5, 30],
+        global_batch_size=8,
+        rollout_indices=list(range(8)),
+        adapter_slots=adapter_slots,
+    )
+    for rank, rank_micro_batches in enumerate(micro_batch_indices):
+        for micro_batch in rank_micro_batches:
+            micro_batch_slots = [adapter_slots[partitions[rank][j]] for j in micro_batch]
+            assert micro_batch_slots == sorted(
+                micro_batch_slots
+            ), f"rank {rank} micro-batch not slot-sorted: {micro_batch_slots}"

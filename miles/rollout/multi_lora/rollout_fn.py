@@ -407,6 +407,22 @@ class MultiLoRARolloutFn:
             )
             for key, value in (output.metrics or {}).items():
                 metrics[f"{run.name}/{key}"] = value
+            # Per-run reward observability: one line per selected batch so a
+            # service operator (or an E2E gate) can follow each adapter's
+            # training signal without joining trainer-side logs.
+            rewards = []
+            for group in output.samples:
+                for sample in group:
+                    try:
+                        value = sample.get_reward_value(self.args)
+                    except (KeyError, TypeError):
+                        continue
+                    if isinstance(value, (int, float)):
+                        rewards.append(float(value))
+            if rewards:
+                reward_mean = sum(rewards) / len(rewards)
+                metrics[f"{run.name}/rollout_reward_mean"] = reward_mean
+                logger.info(f"[multilora] ({run.name}) selected batch: n={len(rewards)} reward_mean={reward_mean:.4f}")
 
         step_names = sorted(entry["name"] for entry in batch_plan)
         await asyncio.to_thread(

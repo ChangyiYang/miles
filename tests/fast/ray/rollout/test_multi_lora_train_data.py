@@ -1,7 +1,7 @@
 """Multi-LoRA train-data pipeline (Option 1): BatchPlan-driven step metadata,
-exact dynamic batch size, actual-count normalization inputs, plan-authoritative
-slot routing, and per-group reward normalization with heterogeneous group
-sizes."""
+no-trim postprocessing (batch shaping rides the rollout-side DP schedule),
+actual-count normalization inputs, plan-authoritative slot routing, and
+per-group reward normalization with heterogeneous group sizes."""
 
 import pytest
 
@@ -19,7 +19,6 @@ from miles.utils.types import AdapterRef
 def multi_lora_args(**overrides):
     defaults = dict(
         multi_lora=True,
-        use_dynamic_global_batch_size=True,
         grpo_std_normalization=True,
     )
     defaults.update(overrides)
@@ -74,17 +73,21 @@ def run_pipeline(dp_size: int = 2):
     return data, metadata, train_data
 
 
-def test_postprocess_extracts_group_sizes_and_exact_batch_size():
+def test_postprocess_extracts_group_sizes_and_never_trims():
     data, metadata, _ = run_pipeline()
     assert metadata["prompt_group_sizes"] == [4, 4, 2]
-    assert metadata["dynamic_global_batch_size"] == 10  # exact batch size, no trim
-    assert len(data) == 10  # flattened
+    # Batch shaping rides the rollout-side DP schedule: no dynamic-gbs
+    # bookkeeping, and every selected sample survives postprocessing.
+    assert "dynamic_global_batch_size" not in metadata
+    assert len(data) == 10  # flattened, untrimmed
 
 
-def test_multi_lora_rejects_dp_indivisible_batch():
+def test_dp_indivisible_batch_is_kept_whole():
+    # 10 samples across dp_size=4: the rollout-side schedule distributes
+    # micro-batches (not sample counts), so divisibility is no longer required.
     args = multi_lora_args()
-    with pytest.raises(ValueError, match="not divisible by dp_size"):
-        postprocess_rollout_data(args, make_batch(), train_parallel_config={"dp_size": 4})
+    data, _ = postprocess_rollout_data(args, make_batch(), train_parallel_config={"dp_size": 4})
+    assert len(data) == 10
 
 
 def test_step_fields_come_from_the_batch_plan():

@@ -153,33 +153,9 @@ def validate_multi_lora_args(args: Any) -> None:
             args.multi_lora_max_adapter_global_batch_size > 0
         ), "--multi-lora-max-adapter-global-batch-size must be positive"
 
-    # Trainer DP size, used to validate adapter batch shapes; guarded for harnesses without megatron args set.
-    if all(
-        hasattr(args, name)
-        for name in (
-            "world_size",
-            "tensor_model_parallel_size",
-            "pipeline_model_parallel_size",
-            "context_parallel_size",
-        )
-    ):
-        from miles.utils.megatron_args_utils import compute_megatron_world_size_except_dp
-
-        model_parallel = compute_megatron_world_size_except_dp(args)
-        assert (
-            args.world_size % model_parallel == 0
-        ), f"actor world size {args.world_size} is not divisible by tp*pp*cp {model_parallel}"
-        args.multi_lora_dp_size = args.world_size // model_parallel
-    else:
-        args.multi_lora_dp_size = None
-
-    # Batches are variable-sized; carry the exact sample
-    # count through rollout conversion instead of trimming to --global-batch-size.
-    assert not args.disable_rollout_trim_samples, (
-        "Multi-LoRA computes the exact dynamic batch size in rollout postprocessing; "
-        "do not pass --disable-rollout-trim-samples"
-    )
-    args.use_dynamic_global_batch_size = True
+    # Batch shaping rides the rollout-side DP schedule: the whole selection
+    # trains as one step, micro-batches pack slot-contiguously, and nothing is
+    # trimmed — no dynamic-global-batch-size bookkeeping needed.
     args.megatron_to_hf_mode = "bridge"
 
 
