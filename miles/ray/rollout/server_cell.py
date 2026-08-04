@@ -139,6 +139,12 @@ class ServerCell:
         if not await probe_server_healthy(server_url=addr_info.server_url, api_key=self.meta.sglang_api_key):
             return
 
+        takes_weights = self.meta.update_weights and not self.args.debug_rollout_only
+        if takes_weights:
+            # Releasing the memory occupation discards the weights the engine loaded from
+            # disk, so the checker has to record them while they are still the real ones.
+            await self._prepare_weight_update_checker()
+
         if self.meta.needs_offload:
             api_client = SGLangApiClient(server_url=addr_info.server_url)
             await api_client.release_memory_occupation()
@@ -146,10 +152,8 @@ class ServerCell:
 
         self._change_state("mark_pending_weights", StateInitializing, StatePendingWeights(addr_info=addr_info))
 
-        if not self.meta.update_weights or self.args.debug_rollout_only:
+        if not takes_weights:
             await self.mark_weights_ready()
-        else:
-            await self._prepare_weight_update_checker()
 
     async def _prepare_weight_update_checker(self) -> None:
         if not self.args.check_weight_update_equal:
