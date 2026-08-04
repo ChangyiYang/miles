@@ -4,10 +4,6 @@ the KV-cache namespace), and the live-upsert serving_version override."""
 
 from types import SimpleNamespace
 
-from tests.ci.ci_register import register_cpu_ci
-
-register_cpu_ci(est_time=10, suite="stage-a-cpu")
-
 from miles.rollout.generate_utils.generate_endpoint_utils import apply_adapter_routing
 from miles.utils.lora import LORA_ADAPTER_NAME
 from miles.utils.multi_lora import cache_extra_key, rid_prefix, serving_lora_name

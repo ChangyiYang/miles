@@ -87,6 +87,11 @@ async def main(args):
         except ray.exceptions.RayTaskError as e:
             if _is_empty_batch_timeout(e):
                 logger.warning(f"Generate timed out with no trainable groups; retrying reconcile/update. {e}")
+                # Pace the retry: an admission-empty selection (e.g. every slot
+                # transiently non-bindable) raises without consuming the empty
+                # wait, and an unpaced continue would busy-loop through
+                # reconcile/generate until capacity frees.
+                await asyncio.sleep(args.multi_lora_idle_poll_s)
                 continue
             raise
 
