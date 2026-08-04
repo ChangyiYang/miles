@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import pybase64
 
-from miles.utils.lora import LORA_ADAPTER_NAME, is_lora_enabled
+from miles.utils.lora import LORA_ADAPTER_NAME, lora_rollout_enabled
 from miles.utils.multi_lora import cache_extra_key, make_rid, serving_lora_name
 from miles.utils.processing_utils import encode_image_for_rollout_engine, extract_multimodal_train_inputs
 from miles.utils.types import Sample
@@ -70,7 +70,7 @@ def apply_adapter_routing(
         payload["lora_path"] = serving_lora_name(ref.name, ref.registration_id)
         payload["rid"] = make_rid(ref.name, ref.registration_id)
         payload["extra_key"] = cache_extra_key(ref.name, ref.registration_id, version)
-    elif is_lora_enabled(args):
+    elif lora_rollout_enabled(args):
         payload["lora_path"] = LORA_ADAPTER_NAME
     return payload
 
@@ -151,7 +151,7 @@ def get_routed_experts_from_response(args, output, sample):
     info = output["meta_info"].get("routed_experts")
     if info is None:
         return None
-    return _decode_topk_buffer(info, len(sample.tokens) - 1, args.num_layers, args.moe_router_topk)
+    return _decode_topk_buffer(info, len(sample.tokens) - 1, args.num_layers, -1)
 
 
 def get_indexer_topk_from_response(args, output, sample):

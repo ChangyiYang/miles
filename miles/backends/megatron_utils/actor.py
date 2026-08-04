@@ -52,7 +52,7 @@ from .ft.checkpoint_transfer import send_ckpt as _send_ckpt
 from .ft.in_memory_checkpoint import InMemoryCheckpointManager
 from .ft.indep_dp import reconfigure_indep_dp_group
 from .initialize import init, is_first_replica_megatron_main_rank
-from .lora_utils import is_lora_enabled
+from .lora_utils import is_lora_enabled, lora_rollout_enabled
 from .model import TrainStepOutcome, forward_only, initialize_model_and_optimizer, save, train
 from .parallel import verify_megatron_parallel_state
 from .replay_utils import register_replay_list_moe
@@ -70,6 +70,12 @@ logger = logging.getLogger(__name__)
 
 
 def _setup_disk_offload_reclaim(disk_dir: str) -> None:
+    """Wipe this rank's train disk-offload dir on startup and re-arm the atexit wipe.
+
+    torch_memory_saver unlinks each backup file as its allocation is freed on a
+    graceful teardown, but a SIGKILL'd run leaves stale files behind. The dir is
+    per-rank (see actor_factory), so clearing it wholesale touches nobody else.
+    """
     if not disk_dir:
         return
     shutil.rmtree(disk_dir, ignore_errors=True)
@@ -249,7 +255,7 @@ class MegatronTrainRayActor(TrainRayActor):
             weights_getter=lambda: self.weights_backuper.get("actor"),
             model_name=type(self.hf_config).__name__.lower() if self.args.model_name is None else self.args.model_name,
             quantization_config=getattr(self.hf_config, "quantization_config", None),
-            is_lora=is_lora_enabled(args),
+            is_lora=lora_rollout_enabled(args),
         )
 
         # Adapters currently loaded into Megatron slots on this rank.
@@ -289,7 +295,7 @@ class MegatronTrainRayActor(TrainRayActor):
 
         destroy_process_groups()
 
-        tag = "default" if is_lora_enabled(self.args) else None
+        tag = "default" if lora_rollout_enabled(self.args) else None
         torch_memory_saver.pause(tag=tag)
 
         self._asleep = True
@@ -308,7 +314,7 @@ class MegatronTrainRayActor(TrainRayActor):
             return
         print_memory("before wake_up model")
 
-        tag = "default" if is_lora_enabled(self.args) else None
+        tag = "default" if lora_rollout_enabled(self.args) else None
         torch_memory_saver.resume(tag=tag)
 
         clear_memory()
