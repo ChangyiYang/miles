@@ -14,7 +14,6 @@ from miles.ray.multi_lora.registry import AdapterRegistry, AdapterState
 from miles.utils.adapter_config import AdapterRunConfig
 from miles.utils.multi_lora import make_rid, parse_adapter
 
-
 # Registration validates that the data path exists; the test file itself is a
 # convenient always-present stand-in.
 DATA_FILE = __file__
@@ -382,3 +381,32 @@ async def test_register_accepts_reward_config_from_global_args(tmp_path):
     backend = MultiLoRABackend(args, "http://unused")
     await backend.register("A", make_config(rm_type=None))
     assert backend.registry.records["A"].config.rm_type is None  # resolved at reward time via args
+
+
+def test_commit_bind_syncs_record_slots_with_the_pool():
+    # An eviction-bind must land on the records too: the snapshot can never
+    # disagree with the SlotPool about who holds a slot (reconcile and the
+    # HTTP status view derive loaded state from the records).
+    registry = AdapterRegistry(max_adapters=1)
+    register_and_promote(registry, "A")
+    registry.register("B", None)
+    assert registry.records["B"].slot is None  # queued unbound
+
+    tenant_b = registry.records["B"].tenant
+    plan = registry.plan_bind("txn1", [tenant_b])
+    assert plan[tenant_b]["evict"] == registry.records["A"].tenant
+    registry.commit_bind("txn1")
+
+    assert registry.records["A"].slot is None
+    assert registry.records["B"].slot == 0
+    assert registry.slot_pool.entry_of(tenant_b).slot == 0
+
+
+def test_abort_bind_leaves_record_slots_untouched():
+    registry = AdapterRegistry(max_adapters=1)
+    register_and_promote(registry, "A")
+    registry.register("B", None)
+    registry.plan_bind("txn1", [registry.records["B"].tenant])
+    registry.abort_bind("txn1")
+    assert registry.records["A"].slot == 0
+    assert registry.records["B"].slot is None

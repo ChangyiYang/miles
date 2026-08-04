@@ -135,6 +135,37 @@ class AdapterRegistry:
             logger.info(f"Adapter '{name}' bootstrap-bound to slot {slot}")
         return bound
 
+    # ---------------- bind transactions (driver-sequenced only) ----------------
+
+    def bindable_slot_count(self) -> int:
+        return self.slot_pool.bindable_count()
+
+    def plan_bind(self, txn_id: str, tenants: list[tuple[str, str]]) -> dict:
+        return self.slot_pool.plan_bind(txn_id, tenants)
+
+    def commit_bind(self, txn_id: str) -> None:
+        """Reservations become tenancy in the pool AND on the records: the
+        snapshot must never disagree with the SlotPool about who holds a slot
+        (reconcile and the HTTP status view derive loaded state from it)."""
+        committed = [
+            (entry.proposed_tenant, entry.tenant, entry.slot)
+            for entry in self.slot_pool.entries
+            if entry.reserved_by == txn_id
+        ]
+        self.slot_pool.commit_bind(txn_id)
+        for proposed, previous, slot in committed:
+            if previous is not None and previous != proposed:
+                self._sync_record_slot(previous, None)
+            self._sync_record_slot(proposed, slot)
+
+    def abort_bind(self, txn_id: str) -> None:
+        self.slot_pool.abort_bind(txn_id)
+
+    def _sync_record_slot(self, tenant: tuple[str, str], slot: int | None) -> None:
+        record = self.records.get(tenant[0])
+        if record is not None and record.registration_id == tenant[1]:
+            record.slot = slot
+
     def deregister(self, name: str) -> None:
         record = self.records.get(name)
         if record is not None and record.state in (AdapterState.PENDING, AdapterState.ACTIVE):

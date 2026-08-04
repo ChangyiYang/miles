@@ -271,9 +271,10 @@ class MultiLoRARolloutFn:
 
     @staticmethod
     async def _call_child(fn, input: RolloutFnTrainInput):
-        is_async = inspect.iscoroutinefunction(fn) or inspect.iscoroutinefunction(
-            getattr(fn, "__call__", None)
-        )
+        is_async = inspect.iscoroutinefunction(fn)
+        if not is_async and callable(fn):
+            # Class-based child rollout fns implement an async __call__.
+            is_async = inspect.iscoroutinefunction(fn.__call__)
         if is_async:
             return await fn(input)
         # Sync child: run off the event loop so other adapters keep generating.

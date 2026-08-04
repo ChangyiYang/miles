@@ -3,8 +3,7 @@
 Pins the policy invariants: whole child batches are atomic (overshoot, never
 split), the round-robin cursor persists across selections, the empty-batch and
 coalesce clocks are separate, child failures isolate to their adapter, and the
-merge emits both the BatchPlan control plane and the transitional Option-2
-signals exactly once per selected adapter.
+merge emits the BatchPlan control plane exactly once per selected adapter.
 """
 
 import asyncio
@@ -15,11 +14,7 @@ import pytest
 
 import miles.rollout.multi_lora.rollout_fn as rollout_fn_module
 from miles.rollout.base_types import RolloutFnTrainOutput
-from miles.rollout.multi_lora.rollout_fn import (
-    AdapterRolloutRuntime,
-    MultiLoRARolloutFn,
-    leaf_sample_count,
-)
+from miles.rollout.multi_lora.rollout_fn import AdapterRolloutRuntime, MultiLoRARolloutFn, leaf_sample_count
 from miles.utils.adapter_config import AdapterRun, AdapterRunConfig
 from miles.utils.multi_lora import EmptyBatchTimeoutError
 from miles.utils.types import AdapterRef, Sample
@@ -53,9 +48,7 @@ def make_ready_runtime(name: str, reg: str, slot: int, n_groups: int, group_size
     runtime.task = None
     runtime.error = None
     ref = AdapterRef(name=name, registration_id=reg, serving_version=1, slot=slot)
-    groups = [
-        [Sample(prompt="p", adapter=ref, metadata={}) for _ in range(group_size)] for _ in range(n_groups)
-    ]
+    groups = [[Sample(prompt="p", adapter=ref, metadata={}) for _ in range(group_size)] for _ in range(n_groups)]
     runtime.ready_output = RolloutFnTrainOutput(samples=groups, metrics={"reward": slot})
     return runtime
 
@@ -263,6 +256,4 @@ class TestChildAbortScoping:
         state = SimpleNamespace(args=args, aborted=False)
         asyncio.run(irt.abort(state, set(), rollout_id=0))
 
-        assert posted == [
-            ("http://engine:1/abort_request", {"rid": rid_prefix("a", "reg1"), "prefix": True})
-        ]
+        assert posted == [("http://engine:1/abort_request", {"rid": rid_prefix("a", "reg1"), "prefix": True})]

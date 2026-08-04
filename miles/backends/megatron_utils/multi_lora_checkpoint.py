@@ -42,9 +42,7 @@ def stable_slot_param_name(name: str, slot: int) -> str:
 
     Matches the exposed-slot naming that ``load_adapter`` consumes, so the
     weights section of a sidecar is directly loadable into ANY slot."""
-    return _SLOT_INDEX.sub(
-        lambda m: ".adapter." if int(m.group(1)) == slot else m.group(0), name
-    )
+    return _SLOT_INDEX.sub(lambda m: ".adapter." if int(m.group(1)) == slot else m.group(0), name)
 
 
 def named_adapter_slot_parameters(model, slot: int):
@@ -80,11 +78,7 @@ def _slot_adam_index(optimizer, slot: int) -> dict[int, dict]:
 def _slot_group_steps(optimizer, slot: int) -> list:
     from miles.backends.megatron_utils.multi_lora_optimizer import _slot_children
 
-    return [
-        group.get("step", 0)
-        for child in _slot_children(optimizer, slot)
-        for group in child.param_groups
-    ]
+    return [group.get("step", 0) for child in _slot_children(optimizer, slot) for group in child.param_groups]
 
 
 def sidecar_dir(adapter) -> Path | None:
@@ -122,8 +116,7 @@ def save_slot_state(args, model, optimizer, adapter, *, reason: str = "swap") ->
             masters[stable_name] = main.detach().cpu()
         if state:
             adam_state[stable_name] = {
-                key: (value.detach().cpu() if torch.is_tensor(value) else value)
-                for key, value in state.items()
+                key: (value.detach().cpu() if torch.is_tensor(value) else value) for key, value in state.items()
             }
 
     rank = dist.get_rank() if dist.is_initialized() else 0

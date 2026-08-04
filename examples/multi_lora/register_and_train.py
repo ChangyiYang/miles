@@ -75,11 +75,7 @@ def watch(client: AdapterServiceClient, names: list[str], poll_s: float, timeout
     deadline = time.time() + timeout_s
     while pending and time.time() < deadline:
         runs = client.runs()
-        done = {
-            name
-            for name in pending
-            if name not in runs or runs[name].get("state") in TERMINAL_STATES
-        }
+        done = {name for name in pending if name not in runs or runs[name].get("state") in TERMINAL_STATES}
         for name in sorted(done):
             print(f"'{name}' completed")
         pending -= done
@@ -119,8 +115,10 @@ def main() -> int:
         if unfinished:
             print(f"timed out with {unfinished} run(s) still active", file=sys.stderr)
             return 1
-        print("all adapter runs completed; checkpoints are under each run's 'save' dir "
-              "(or the trainer's --save root by default)")
+        print(
+            "all adapter runs completed; checkpoints are under each run's 'save' dir "
+            "(or the trainer's --save root by default)"
+        )
         return 0
     except KeyboardInterrupt:
         print("\ninterrupted; deregistering this client's runs")

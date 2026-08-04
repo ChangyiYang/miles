@@ -8,20 +8,13 @@ from types import SimpleNamespace
 
 import torch
 
-from miles.backends.megatron_utils.multi_lora_checkpoint import (
-    FORMAT,
-    find_slot_state,
-    stable_slot_param_name,
-)
+from miles.backends.megatron_utils.multi_lora_checkpoint import FORMAT, find_slot_state, stable_slot_param_name
 
 
 class TestStableName:
     def test_strips_only_the_target_slot(self):
         name = "decoder.layers.0.self_attention.linear_qkv.adapters.3.linear_in.weight"
-        assert (
-            stable_slot_param_name(name, 3)
-            == "decoder.layers.0.self_attention.linear_qkv.adapter.linear_in.weight"
-        )
+        assert stable_slot_param_name(name, 3) == "decoder.layers.0.self_attention.linear_qkv.adapter.linear_in.weight"
         # A co-tenant's index must survive untouched.
         assert stable_slot_param_name(name, 2) == name
 
@@ -39,9 +32,7 @@ class TestStableName:
 class TestManifestGating:
     def _adapter(self, tmp_path, name="a"):
         config = SimpleNamespace(save=tmp_path, rank=8, alpha=16)
-        return SimpleNamespace(
-            name=name, registration_id="r1", slot=0, step=3, version=2, config=config
-        )
+        return SimpleNamespace(name=name, registration_id="r1", slot=0, step=3, version=2, config=config)
 
     def test_no_manifest_means_no_sidecar(self, tmp_path):
         adapter = self._adapter(tmp_path)

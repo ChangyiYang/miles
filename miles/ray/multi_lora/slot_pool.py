@@ -50,9 +50,7 @@ class SlotPool:
         return {e.slot for e in self.entries if e.tenant is None and e.reserved_by is None}
 
     def bindable_count(self) -> int:
-        return sum(
-            1 for e in self.entries if (e.tenant is None or not e.pins) and e.reserved_by is None
-        )
+        return sum(1 for e in self.entries if (e.tenant is None or not e.pins) and e.reserved_by is None)
 
     # ---------------------- immediate tenancy ----------------------
 

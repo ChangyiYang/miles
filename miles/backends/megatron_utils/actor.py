@@ -598,9 +598,7 @@ class MegatronTrainRayActor(TrainRayActor):
         identical plan, so the collective load/save sequences agree."""
         if not is_multi_lora_enabled(self.args) or not bind_plan:
             return
-        needs_work = any(
-            entry.get("evict") or entry["name"] not in self.loaded_adapters for entry in bind_plan
-        )
+        needs_work = any(entry.get("evict") or entry["name"] not in self.loaded_adapters for entry in bind_plan)
         if not needs_work:
             return
         from dataclasses import replace as dataclass_replace

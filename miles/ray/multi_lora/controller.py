@@ -103,18 +103,18 @@ class MultiLoRAController:
     # ---------------- bind transactions (driver-sequenced only) ----------------
 
     def bindable_slot_count(self) -> int:
-        return self.backend.registry.slot_pool.bindable_count()
+        return self.backend.registry.bindable_slot_count()
 
     def plan_bind(self, txn_id: str, tenants: list) -> dict:
         """Authoritative admission at selection finalization (still inside
         generate). Reservations are provisional until commit/abort."""
-        return self.backend.registry.slot_pool.plan_bind(txn_id, [tuple(t) for t in tenants])
+        return self.backend.registry.plan_bind(txn_id, [tuple(t) for t in tenants])
 
     def commit_bind(self, txn_id: str) -> None:
-        self.backend.registry.slot_pool.commit_bind(txn_id)
+        self.backend.registry.commit_bind(txn_id)
 
     def abort_bind(self, txn_id: str) -> None:
-        self.backend.registry.slot_pool.abort_bind(txn_id)
+        self.backend.registry.abort_bind(txn_id)
 
     def set_adapter_step(self, name: str, step: int) -> None:
         self.backend.registry.set_step(name, step)

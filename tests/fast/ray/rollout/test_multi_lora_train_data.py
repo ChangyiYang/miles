@@ -110,3 +110,20 @@ def test_rewards_normalize_within_heterogeneous_groups():
     assert rewards[4:8] == pytest.approx([0.0] * 4)
     # Singleton-free std normalization applied to group 1 (n=4, mixed).
     assert max(abs(r) for r in rewards[0:4]) > 0.5
+
+
+def test_adapter_missing_from_bind_plan_is_an_error_not_a_stale_fallback():
+    # A name absent from the plan means the batch and its selection disagree;
+    # training on the stamped slot could write into another tenant's adapter.
+    args = multi_lora_args()
+    data, metadata = postprocess_rollout_data(args, make_batch(), train_parallel_config={"dp_size": 2})
+    metadata.update(batch_plan_metadata())
+    del metadata["adapter_name_by_slot"][1]  # drop B's mapping
+    with pytest.raises(ValueError, match="no bind-plan slot"):
+        convert_samples_to_train_data(
+            args,
+            data,
+            metadata=metadata,
+            custom_convert_samples_to_train_data_func=None,
+            custom_reward_post_process_func=None,
+        )
