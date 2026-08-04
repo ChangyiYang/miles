@@ -236,6 +236,12 @@ class MegatronTrainRayActor(TrainRayActor):
         else:
             if self.args.update_weight_transfer_mode == "broadcast":
                 update_weight_cls = UpdateWeightFromDistributed
+            elif self.args.update_weight_transfer_mode == "shard-delta":
+                from .update_weight.update_weight_from_distributed.shard_delta import (
+                    UpdateWeightFromShardDelta,
+                )
+
+                update_weight_cls = UpdateWeightFromShardDelta
             elif self.args.update_weight_transfer_mode == "disk-delta":
                 # Lazy import: keeps the delta deps (numpy/zstandard/xxhash) off the other paths.
                 from .update_weight.update_weight_from_distributed.delta import UpdateWeightFromDiskDelta
