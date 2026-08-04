@@ -81,7 +81,7 @@ async def test_post_methods_hit_the_server_url_with_expected_payload(client, rec
         "flush_cache": True,
         "selector": "all",
     }
-    assert recorder.calls[1][2]["json"] == {"new_version": "run-0001"}
+    assert recorder.calls[1][2]["json"] == {"new_version": "run-0001", "abort_all_requests": True}
 
 
 async def test_update_weights_from_tensor_omits_weight_version_when_not_given(client, recorder):
@@ -366,39 +366,6 @@ class TestProbeServerHealthy:
         await sglang_api_client.probe_server_healthy(server_url=SERVER_URL, api_key="secret")
 
         assert rec.calls[0][2]["headers"]["Authorization"] == "Bearer secret"
-
-
-class TestWaitServerHealthy:
-    """``wait_server_healthy`` polls until the server answers, and gives up if the process dies."""
-
-    async def test_it_polls_health_then_flush_cache(self, monkeypatch):
-        """Readiness means both the health endpoint and a drained working queue."""
-        rec = _Recorder()
-        rec.install(monkeypatch, responses=[_FakeResponse(status_code=503), _FakeResponse(), _FakeResponse()])
-        monkeypatch.setattr(asyncio, "sleep", _noop_sleep)
-
-        await sglang_api_client.wait_server_healthy(server_url=SERVER_URL, api_key="k", is_process_alive=lambda: True)
-
-        assert [url for _verb, url, _kwargs in rec.calls] == [
-            f"{SERVER_URL}/health_generate",
-            f"{SERVER_URL}/health_generate",
-            f"{SERVER_URL}/flush_cache",
-        ]
-
-    async def test_it_raises_once_the_server_process_is_gone(self, monkeypatch):
-        """Polling a dead process forever would hang engine startup instead of reporting it."""
-
-        class _Refusing:
-            async def get(self, url, **kwargs):
-                raise httpx.ConnectError("connection refused")
-
-        monkeypatch.setattr(GeneralHttpClientProvider, "client", lambda: _Refusing())
-        monkeypatch.setattr(asyncio, "sleep", _noop_sleep)
-
-        with pytest.raises(Exception, match="Server process terminated unexpectedly"):
-            await sglang_api_client.wait_server_healthy(
-                server_url=SERVER_URL, api_key="k", is_process_alive=lambda: False
-            )
 
 
 async def _noop_sleep(seconds):

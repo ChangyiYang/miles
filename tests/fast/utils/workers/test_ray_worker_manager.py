@@ -810,7 +810,7 @@ class TestGetWorkerInfos:
         assert [info.generation for info in infos] == [1, 1]
         assert [info.gpu_ids for info in infos] == [[4, 5], [6, 7]]
         assert [info.self_addrs for info in infos] == manager.get_addrs()["engine"][2:]
-        assert [info.actor_handle for info in infos] == fake_ray_cluster.handles[2:]
+        assert [info.handle._actor_handle for info in infos] == fake_ray_cluster.handles[2:]
 
 
 class TestGetWorkerInfosErrors:
@@ -947,12 +947,14 @@ class TestStartAndStopCells:
         with pytest.raises(AssertionError):
             await manager.stop_cells(["engine-7"])
 
-    async def test_starting_a_running_cell_is_rejected(self, fake_ray_cluster: FakeRayCluster):
-        """Relaunching a live cell would orphan its current actors."""
+    async def test_starting_a_running_cell_leaves_it_alone(self, fake_ray_cluster: FakeRayCluster):
+        """Relaunching a live cell would orphan its current actors, so a repeated resume is a no-op."""
         manager = await _launch([_make_spec("engine")])
+        handles_before = list(fake_ray_cluster.handles)
 
-        with pytest.raises(AssertionError):
-            await manager.start_cells(["engine-0"])
+        await manager.start_cells(["engine-0"])
+
+        assert fake_ray_cluster.handles == handles_before
 
     async def test_a_restarted_cell_allocates_ports_and_addrs_again(self, fake_ray_cluster: FakeRayCluster):
         """The new process needs its own addresses; a stale addr book would point at the dead one."""
