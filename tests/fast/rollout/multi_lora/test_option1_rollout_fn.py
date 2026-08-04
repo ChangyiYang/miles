@@ -39,7 +39,7 @@ def make_wrapper(
     return wrapper
 
 
-def make_ready_runtime(name: str, reg: str, slot: int, n_groups: int, group_size: int = 2):
+def make_ready_runtime(name: str, reg: str, slot: int, n_groups: int, group_size: int = 2, reward=None):
     config = AdapterRunConfig(data="/dev/null", rollout_batch_size=n_groups, n_samples_per_prompt=group_size)
     run = AdapterRun(name=name, config=config, slot=slot, version=1, registration_id=reg)
     runtime = AdapterRolloutRuntime.__new__(AdapterRolloutRuntime)
@@ -48,7 +48,10 @@ def make_ready_runtime(name: str, reg: str, slot: int, n_groups: int, group_size
     runtime.task = None
     runtime.error = None
     ref = AdapterRef(name=name, registration_id=reg, serving_version=1, slot=slot)
-    groups = [[Sample(prompt="p", adapter=ref, metadata={}) for _ in range(group_size)] for _ in range(n_groups)]
+    groups = [
+        [Sample(prompt="p", adapter=ref, metadata={}, reward=reward) for _ in range(group_size)]
+        for _ in range(n_groups)
+    ]
     runtime.ready_output = RolloutFnTrainOutput(samples=groups, metrics={"reward": slot})
     return runtime
 
@@ -135,8 +138,11 @@ class TestSelection:
 
 class TestMerge:
     def test_merge_emits_batch_plan_and_books_the_selection(self, controller_calls):
+        # The wrapper args (SimpleNamespace) deliberately carry no reward_key:
+        # the reward observability must tolerate minimal args, and B's
+        # reward-less samples must not emit a reward metric.
         wrapper = make_wrapper()
-        a = make_ready_runtime("A", "ra", 0, n_groups=2)
+        a = make_ready_runtime("A", "ra", 0, n_groups=2, reward=0.5)
         b = make_ready_runtime("B", "rb", 1, n_groups=1, group_size=3)
         add_runtime(wrapper, a)
         add_runtime(wrapper, b)
@@ -159,7 +165,8 @@ class TestMerge:
         assert "step_slots" not in head.metadata
         assert controller_calls == [("record_train_selection", (7, ["A", "B"]))]
         # Metrics are namespaced per adapter — no cross-adapter key collisions.
-        assert output.metrics == {"A/reward": 0, "B/reward": 1}
+        # A's numeric rewards surface as a per-run mean; B has none to report.
+        assert output.metrics == {"A/reward": 0, "B/reward": 1, "A/rollout_reward_mean": 0.5}
         # Selected runtimes are consumed and gated until the next generate call.
         assert a.state == AdapterRolloutRuntime.IDLE
         assert a.ready_output is None

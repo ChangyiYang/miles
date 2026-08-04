@@ -27,7 +27,6 @@ def make_args(max_adapters: int = 4, save: str | None = None, dp_size: int = 2) 
         lora_alpha=32,
         rollout_batch_size=16,
         n_samples_per_prompt=4,
-        multi_lora_dp_size=dp_size,
         multi_lora_max_adapter_global_batch_size=256,
     )
 

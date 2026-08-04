@@ -188,7 +188,8 @@ class Sample:
         return sample
 
     def get_reward_value(self, args) -> float:
-        return self.reward if not args.reward_key else self.reward[args.reward_key]
+        reward_key = getattr(args, "reward_key", None)
+        return self.reward if not reward_key else self.reward[reward_key]
 
     @property
     def effective_response_length(self):

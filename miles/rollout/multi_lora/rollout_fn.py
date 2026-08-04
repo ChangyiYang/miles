@@ -415,7 +415,7 @@ class MultiLoRARolloutFn:
                 for sample in group:
                     try:
                         value = sample.get_reward_value(self.args)
-                    except (KeyError, TypeError):
+                    except (AttributeError, KeyError, TypeError):
                         continue
                     if isinstance(value, (int, float)):
                         rewards.append(float(value))

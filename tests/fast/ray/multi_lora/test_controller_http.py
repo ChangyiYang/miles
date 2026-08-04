@@ -103,7 +103,6 @@ async def running_controller(server_cls=MultiLoRAHTTPServer):
             lora_alpha=32,
             rollout_batch_size=16,
             n_samples_per_prompt=4,
-            multi_lora_dp_size=2,
             multi_lora_max_adapter_global_batch_size=256,
         ),
         router_url,
