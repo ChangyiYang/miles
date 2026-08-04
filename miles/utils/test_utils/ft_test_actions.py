@@ -23,6 +23,9 @@ class FTTestAction(FrozenStrictBaseModel):
     def resolve_cell_id(self, cell_ids: list[str]) -> str:
         return cell_ids[self.cell_index]
 
+    def resolve_cell_index(self, num_cells: int) -> int:
+        return self.cell_index if self.cell_index >= 0 else num_cells + self.cell_index
+
 
 _ACTION_LIST_ADAPTER: TypeAdapter[list[FTTestAction]] = TypeAdapter(list[FTTestAction])
 
