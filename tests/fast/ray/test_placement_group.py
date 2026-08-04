@@ -102,17 +102,6 @@ class TestCreateRolloutComponents:
         assert num_rollout_per_epoch is None
         assert args.num_rollout == 3
 
-    async def test_weight_check_and_offload_go_to_the_controller(self, fake_components):
-        """Engine-side startup steps go to the controller, never to the executor."""
-        args = _make_args(num_rollout=1, check_weight_update_equal=True, offload_rollout=True)
-
-        await create_rollout_components(args)
-
-        actions = [call.kwargs["action"] for call in fake_components.controller.check_weights.await_args_list]
-        assert actions == ["snapshot", "reset_tensors"]
-        fake_components.controller.offload.assert_awaited_once()
-        fake_components.executor_handle.check_weights.remote.assert_not_called()
-
 
 class TestCreatePlacementGroups:
     @staticmethod

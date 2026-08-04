@@ -172,7 +172,7 @@ def test_update_weights_only_uses_temporary_process_groups_when_asleep(actor_mod
     info = Namespace(
         engine_gpu_counts=[],
         engine_gpu_offsets=[],
-        has_new_engines=False,
+        snapshot_cell_id_to_hashes={},
         rollout_engines=[],
     )
     reload_groups = Mock()
