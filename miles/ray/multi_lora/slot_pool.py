@@ -21,8 +21,9 @@ Tenant = tuple[str, str]
 class SlotEntry:
     slot: int
     tenant: Tenant | None = None
-    # Non-empty pins make the entry non-evictable: {"selected", "training",
-    # "publish_pending", "retained_grads"}.
+    # Non-empty pins make the entry non-evictable. "selected" spans a bind
+    # transaction's plan -> commit/abort window; callers with longer-lived
+    # protection needs use pin()/unpin() with their own reason.
     pins: set = field(default_factory=set)
     # A reservation hides the entry from further victim picks until its bind
     # transaction commits or aborts. Without it one plan can hand the same
@@ -88,35 +89,41 @@ class SlotPool:
     # ---------------------- bind transactions ----------------------
 
     def plan_bind(self, txn_id: str, tenants: list[Tenant]) -> dict[Tenant, dict]:
-        """Authoritative admission for one selection: reserve a slot per
-        tenant — keep-warm hit first, then free, then LRU-evictable — and return
-        {tenant: {"slot", "evict", "txn_id"}}. Tenants that no longer fit are
-        omitted (the wrapper re-queues them as READY). Reservations are
-        provisional until commit_bind/abort_bind."""
+        """Authoritative admission for one selection: reserve a slot per tenant
+        and return {tenant: {"slot", "evict", "txn_id"}}. Keep-warm hits reserve
+        their own slots first, so a co-selected resident is never picked as an
+        eviction victim; the rest place into free or LRU-evictable slots in the
+        caller's selection order (round-robin fairness decides who is omitted
+        when the pool is short). Omitted tenants re-queue as READY. Reservations
+        are provisional until commit_bind/abort_bind."""
         plan: dict[Tenant, dict] = {}
-        for tenant in sorted(tenants):
+        placing: list[Tenant] = []
+        for tenant in tenants:
             if (entry := self.entry_of(tenant)) is not None:
-                if entry.reserved_by is not None:
-                    continue
-                evict = None
-            elif (entry := self._pick_victim(allow_evict=True)) is not None:
-                evict = entry.tenant
-            else:
+                if entry.reserved_by is None:
+                    self._reserve(entry, txn_id, tenant)
+                    plan[tenant] = {"slot": entry.slot, "evict": None, "txn_id": txn_id}
                 continue
-            entry.reserved_by = txn_id
-            entry.proposed_tenant = tenant
-            entry.pins.add("selected")
+            placing.append(tenant)
+        for tenant in placing:
+            if (entry := self._pick_victim(allow_evict=True)) is None:
+                continue
+            evict = entry.tenant
+            self._reserve(entry, txn_id, tenant)
             plan[tenant] = {"slot": entry.slot, "evict": evict, "txn_id": txn_id}
         return plan
 
     def commit_bind(self, txn_id: str) -> None:
-        """Reservations become tenancy. The "selected" pin stays until the
-        executor converts it (training -> publish) or the selection is done."""
+        """Reservations become tenancy. The "selected" pin only protects the
+        plan -> commit/abort window, so it clears here: committed tenants must
+        stay LRU-evictable or every slot that ever hosted a selection would be
+        pinned forever and the pool would stop admitting new tenants."""
         for entry in self.entries:
             if entry.reserved_by == txn_id:
                 entry.tenant = entry.proposed_tenant
                 entry.reserved_by = None
                 entry.proposed_tenant = None
+                entry.pins.discard("selected")
                 self._touch(entry)
 
     def abort_bind(self, txn_id: str) -> None:
@@ -129,6 +136,11 @@ class SlotPool:
                 entry.pins.discard("selected")
 
     # -------------------------- internal --------------------------
+
+    def _reserve(self, entry: SlotEntry, txn_id: str, tenant: Tenant) -> None:
+        entry.reserved_by = txn_id
+        entry.proposed_tenant = tenant
+        entry.pins.add("selected")
 
     def _pick_victim(self, allow_evict: bool):
         free = [e for e in self.entries if e.tenant is None and e.reserved_by is None]

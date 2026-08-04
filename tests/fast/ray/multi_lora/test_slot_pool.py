@@ -80,6 +80,24 @@ class TestPlanBind:
         # a's own slot got reserved for a; a second txn selecting "a" defers.
         assert pool.plan_bind("txn2", [tenant("a")]) == {}
 
+    def test_admission_priority_follows_selection_order(self):
+        # When the pool is short, the caller's round-robin order decides who
+        # is omitted — not the tenants' alphabetical order.
+        pool = SlotPool(1)
+        plan = pool.plan_bind("txn1", [tenant("z"), tenant("a")])
+        assert tenant("z") in plan
+        assert tenant("a") not in plan
+
+    def test_co_selected_resident_is_never_its_plans_eviction_victim(self):
+        # Keep-warm hits reserve first: a resident tenant selected in the same
+        # plan must keep its slot rather than be evicted for an earlier-listed
+        # newcomer (churn would swap it out and back for no reason).
+        pool = SlotPool(1)
+        pool.bind_immediately(tenant("a"))
+        plan = pool.plan_bind("txn1", [tenant("b"), tenant("a")])
+        assert plan[tenant("a")] == {"slot": 0, "evict": None, "txn_id": "txn1"}
+        assert tenant("b") not in plan
+
 
 class TestCommitAbort:
     def test_commit_transfers_tenancy(self):
@@ -90,6 +108,17 @@ class TestCommitAbort:
         pool.commit_bind("txn1")
         assert pool.entry_of(tenant("b")).slot == 0
         assert pool.entry_of(tenant("a")) is None
+
+    def test_commit_clears_selection_pin_keeping_slot_evictable(self):
+        # The "selected" pin only guards the plan -> commit window. If commit
+        # left it in place, every slot that ever hosted a selection would stay
+        # pinned forever and the pool would stop admitting new tenants.
+        pool = SlotPool(1)
+        pool.plan_bind("txn1", [tenant("a")])
+        pool.commit_bind("txn1")
+        assert pool.bindable_count() == 1
+        plan = pool.plan_bind("txn2", [tenant("b")])
+        assert plan[tenant("b")]["evict"] == tenant("a")
 
     def test_abort_rolls_back_reservation_and_keeps_old_tenant(self):
         pool = SlotPool(1)
