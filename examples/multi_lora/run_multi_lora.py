@@ -1,11 +1,13 @@
-"""Multi-LoRA fully-async GRPO example (Qwen3-4B, disaggregated 4 train + 4 rollout GPUs).
+"""Multi-LoRA GRPO example (Qwen3-4B, disaggregated 4 train + 4 rollout GPUs).
 
-Trains multiple LoRA adapters concurrently on a shared base model. Two example
+Trains multiple LoRA adapters concurrently on a shared base model. Each
+adapter is an independent run — its own rank/alpha, batch shape, dataset,
+reward, and ``num_step`` stop condition — and whole per-adapter batches are
+scheduled atomically; adapters may outnumber the slot pool (registrations
+queue unbound and bind when a slot frees or at selection). Two example
 adapters ship in ``adapters/``: gsm8k (rm_type=math) and dapo_math
-(rm_type=deepscaler); each carries its own rank/alpha, batch shape, dataset,
-reward, and ``num_step`` stop condition. The driver is
-``train_multi_lora_async.py`` at the repo root; fully-async training forbids
-``--colocate`` (generation needs continuous GPU).
+(rm_type=deepscaler). The driver is ``train_multi_lora_async.py`` at the repo
+root; it forbids ``--colocate`` (generation needs continuous GPU).
 
 Usage:
   python examples/multi_lora/run_multi_lora.py prepare      # download Qwen3-4B + both datasets (once per node)
@@ -13,9 +15,9 @@ Usage:
   python examples/multi_lora/run_multi_lora.py full-train   # prepare + train
   python examples/multi_lora/run_multi_lora.py serve        # service mode: no adapters preloaded, idles for registrations (API on :8068)
 
-Service mode pairs with the smoke client:
-  python examples/multi_lora/service_smoke.py --api-url http://127.0.0.1:8068 \\
-      --data /root/datasets/gsm8k/train.parquet --input-key messages --label-key label --rm-type math
+Service mode pairs with the client example:
+  python examples/multi_lora/register_and_train.py --api-url http://127.0.0.1:8068 \\
+      --adapter gsm8k=examples/multi_lora/adapters/gsm8k.yaml
 """
 
 from dataclasses import dataclass
@@ -39,7 +41,7 @@ class ScriptArgs(U.ExecuteTrainConfig):
     save_dir: str = "/tmp/multi_lora"
     megatron_path: str = "/root/Megatron-LM"
 
-    # Disaggregated split (fully-async forbids colocate).
+    # Disaggregated split (the multi-LoRA driver forbids colocate).
     num_gpus_per_node: int = 8
     actor_num_gpus: int = 4
     rollout_num_gpus: int = 4
