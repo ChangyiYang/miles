@@ -367,7 +367,8 @@ class TestTriState:
         assert checker.status == TriState.TRUE
 
         activeness.active = False
-        await clock.elapse(5.0)
+        # Activeness is pulled once per loop, so the verdict clears on the next tick.
+        await clock.elapse(10.0)
         assert checker.status == TriState.UNKNOWN
         checker.stop()
 
