@@ -116,6 +116,7 @@ def make_args(**overrides: Any) -> Namespace:
         ft_components=[],
         rollout_health_check_interval=30.0,
         rollout_health_check_timeout=30.0,
+        rollout_health_check_first_wait=0.0,
         rollout_health_check_failure_threshold=3,
         # engine launch command
         seed=42,
