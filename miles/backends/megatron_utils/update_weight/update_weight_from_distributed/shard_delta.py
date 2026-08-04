@@ -11,23 +11,20 @@ The first sync has no baseline, so it publishes full tensors exactly like
 ``broadcast`` and then primes the snapshot; every later sync is sparse.
 """
 
+import logging
 import time
 from typing import Optional
 
 import ray
 import torch
-import torch.distributed as dist
-from ray.actor import ActorHandle
 from tqdm import tqdm
-
-from miles.utils.logging_utils import init_logger
 
 from .broadcast import (
     UpdateWeightFromDistributed,
     update_weights_from_distributed,
 )
 
-logger = init_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # A tensor whose changed fraction exceeds this is cheaper to send whole: the
 # sparse encoding costs 4 bytes of index per element on top of the value.
