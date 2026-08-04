@@ -78,17 +78,17 @@ def _render_cli_argv(args_obj: _ArgsT, *, cli_defaults: _ArgsT, derived_fields: 
         value = getattr(args_obj, field.name)
         if value == getattr(cli_defaults, field.name):
             continue
-
-        flag = "--" + field.name.replace("_", "-")
-        if isinstance(value, bool):
-            assert value, f"{flag} cannot be rendered: the CLI only has a flag for the non-default value"
-            argv.append(flag)
-        elif isinstance(value, list):
-            argv.append(flag)
-            argv.extend(str(item) for item in value)
-        elif isinstance(value, dict):
-            argv.append(flag)
-            argv.extend(f"{key}={item}" for key, item in value.items())
-        else:
-            argv.extend([flag, str(value)])
+        argv.extend(render_cli_option(field.name, value))
     return argv
+
+
+def render_cli_option(name: str, value: object) -> list[str]:
+    flag = "--" + name.replace("_", "-")
+    if isinstance(value, bool):
+        assert value, f"{flag} cannot be rendered: the CLI only has a flag for the non-default value"
+        return [flag]
+    if isinstance(value, list):
+        return [flag, *(str(item) for item in value)]
+    if isinstance(value, dict):
+        return [flag, *(f"{key}={item}" for key, item in value.items())]
+    return [flag, str(value)]
