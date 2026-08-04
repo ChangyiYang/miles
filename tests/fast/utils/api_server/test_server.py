@@ -315,7 +315,7 @@ class TestInjectFault:
         )
 
         assert resp.status_code == 200
-        assert rollout_handler.injected == [("engine-0", FailureMode.SIGKILL, 1)]
+        assert rollout_handler.injected == [("rollout-engine-0", FailureMode.SIGKILL, 1)]
 
     @pytest.mark.asyncio
     async def test_a_handler_without_injection_support_answers_bad_request(
