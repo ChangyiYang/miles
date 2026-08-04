@@ -55,8 +55,19 @@ def render_cli_argv(
         argv = argv + _render_cli_argv(args_obj, cli_defaults=parsed, derived_fields=derived_fields)
         parsed = parse(argv)
 
-    assert parsed == args_obj, f"cli argv roundtrip mismatch: {parsed!r} != {args_obj!r}"
+    assert parsed == args_obj, f"cli argv roundtrip mismatch on {_describe_mismatch(parsed, args_obj)}"
     return argv
+
+
+def _describe_mismatch(parsed: _ArgsT, args_obj: _ArgsT) -> str:
+    """Name the fields that differ; the full reprs are hundreds of fields wide."""
+    if not (dataclasses.is_dataclass(parsed) and dataclasses.is_dataclass(args_obj)):
+        return f"{parsed!r} != {args_obj!r}"
+    return ", ".join(
+        f"{field.name}: parsed {getattr(parsed, field.name)!r} != wanted {getattr(args_obj, field.name)!r}"
+        for field in dataclasses.fields(args_obj)
+        if getattr(parsed, field.name) != getattr(args_obj, field.name)
+    )
 
 
 def _render_cli_argv(args_obj: _ArgsT, *, cli_defaults: _ArgsT, derived_fields: frozenset[str]) -> list[str]:
